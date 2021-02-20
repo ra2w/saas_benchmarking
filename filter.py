@@ -12,7 +12,7 @@ def get_optimal_hist_bin_size(metric,df):
     iqr = q3 - q1
     n = df[metric].count()
     h = int(2*iqr/(n**(1.0/3)))
-    h = np.max(1,h)
+    h = np.maximum(1,h)
     st.write(h)
     return h
 
