@@ -57,16 +57,17 @@ def benchmark_timelines(df):
     st.subheader(f"**Bechmarking {selected_metric}**: {time_to_string(selected_time)} (N={df[selected_metric].count()})")
     metric_hist(col, df, title=f"**{selected_metric} histogram **", xlabel=col)
 
-    n = 5
-    df_top5 = df.sort_values(col,ascending=False).head(n)
+    n = ui.input_bar_limit(df[col].count())
+
+    df_topn = df.sort_values(col, ascending=False).head(n)
     st.subheader(f"Top {n} performers")
-    fig = px.bar(df_top5, x='ticker', y=col, template=px_template,labels={col:f"{col} {schema.col_plot_labels[col]}"})
+    fig = px.bar(df_topn, x='ticker', y=col, template=px_template, labels={col: f"{col} {schema.col_plot_labels[col]}"})
     st.plotly_chart(fig)
 
     st.subheader(f"Bottom {n} performers")
-    df_bot5 = df[df[col]!=0]
-    df_bot5 = df_bot5.sort_values(col, ascending=True).head(n)
-    fig = px.bar(df_bot5, x='ticker', y=col, template=px_template,labels={col:f"{col} {schema.col_plot_labels[col]}"})
+    df_botn = df[df[col] != 0]
+    df_botn = df_botn.sort_values(col, ascending=True).head(n)
+    fig = px.bar(df_botn, x='ticker', y=col, template=px_template, labels={col: f"{col} {schema.col_plot_labels[col]}"})
     st.plotly_chart(fig)
 
     ui.output_table(selected_metric, df, 'Table')

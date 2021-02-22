@@ -2,6 +2,7 @@ import streamlit as st
 from schema import pretty_print as p
 import schema
 import ui
+import numpy as np
 
 """ Filtering by GTM
 """
@@ -35,6 +36,13 @@ growth = {'LTM Rev':'Rev growth',
 def select_main_metric(list_of_metrics):
     main_metric = st.selectbox('Target metric', list_of_metrics)
     return main_metric
+
+@ui.register_plugin(name="input_bar_limit")
+def select_bar_limit(t_max):
+    default = np.minimum(t_max,5)
+    bar_len = st.slider('Filter size', 1, int(t_max), 5)
+    return bar_len
+
 
 """ Filtering by Timeline
 """
