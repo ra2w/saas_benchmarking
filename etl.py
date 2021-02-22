@@ -256,9 +256,9 @@ def load_financials(ticker, ipo_month, ipo_year):
     df = read_company_csv(filename)
     # Normalize columns
     # remove $ and whitespace from column names; add _ between words, add __m for $m
-    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')',
-                                                                                                           '').str.replace(
-        '$', '_').str.replace('/', '_')
+    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_',regex=False).str.replace('(', '',regex=False).str.replace(')',
+                                                                                                           '',regex=False).str.replace(
+        '$', '_',regex=False).str.replace('/', '_',regex=False)
 
     df = df.set_index('fiscal_year')
     # Drop empty rows
@@ -268,9 +268,9 @@ def load_financials(ticker, ipo_month, ipo_year):
     # Transpose
     df = df.T
     # Normalize transpose columns
-    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')',
-                                                                                                           '').str.replace(
-        '$', '_').str.replace('/', '_')
+    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_',regex=False).str.replace('(', '',regex=False).str.replace(')',
+                                                                                                           '',regex=False).str.replace(
+        '$', '_',regex=False).str.replace('/', '_',regex=False)
     df = df[df['total_revenue'].notna()]
 
     df.reset_index(inplace=True)

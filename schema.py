@@ -40,6 +40,34 @@ col_field_formats = {'ARR': dollar_fmt,
                      '':float_fmt
                      }
 
+
+
+col_plot_labels = {'ARR': "($M)",
+                     'ARR growth':"%",
+                     'ARR(0)':"($M)",
+                     'ARR(1)':"($M)",
+                     'CAGR':"%",
+                     'LTM Rev':"($M)",
+                     'LTM Rev(0)':"($M)",
+                     'LTM Rev(1)':"($M)",
+                     'Rev growth':"%",
+                     'GM': "%",
+                     'S&M': "($M)",
+                     'S&M%': "%",
+                     'Opex': "($M)",
+                     'LTM Opex': "($M)",
+                     'EBIT': "($M)",
+                     'LTM EBIT': "($M)",
+                     'Cap Ef.':"",
+                     'NI': "($M)",
+                     'FCF': "($M)",
+                     'FCF%:': "%",
+                     'Op. CF': "($M)",
+                     'LTM CAC': "",
+                     'NDR': "%",
+                     }
+
+
 col_names_transform = {'arr__m': 'ARR',
                        'ltm_rev':'LTM Rev',
                        'gross_profit': 'GP',

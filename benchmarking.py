@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import altair as alt
 import streamlit as st
+import plotly.express as px
 
 # local imports
 from schema import pretty_print as p
@@ -10,28 +11,8 @@ import ui
 import filter
 import schema
 
-use_pyplot = True
-
-def old_pyplot_code():
-    """
-    fig, ax = plt.subplots()
-    ax.hist(df['ARR'], bins=24)
-    st.pyplot(fig)
-
-    fig, ax = plt.subplots()
-    n = df['ARR'].describe()['count']
-    ax.set_title(f'ARR distribution (N={n})')
-    ax.boxplot(df['ARR'], showfliers=False)
-    st.pyplot(fig)
-
-    #    df['1'] = ''
-    #    c2 = alt.Chart(df).mark_boxplot().encode(
-    #        x='1',
-    #        y='ARR'
-    #    )
-    #    #col2.altair_chart(c2)
-"""
-
+# Available templates  ["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"]
+px_template = "plotly_dark"
 
 
 def time_to_string(selected_time):
@@ -50,6 +31,20 @@ def summary_statistics(df,metric,selected_time):
 > - Median {metric} at {time_to_string(selected_time)} = ${np.round(df[metric].median(), 0)}Mhikhaiaktw o.
 """)
 
+
+def metric_hist(col,df,title,xlabel,st_col=False):
+    if df[col].count() <= 2:
+        return
+    st.subheader(title)
+    #summary_statistics(df,col,0)
+    df_s = pd.DataFrame(df[col].describe()).T
+    df_s =df_s.drop('count',axis=1)
+    st.table(df_s.style.format(schema.col_field_formats[col], na_rep="-"))
+    fig = px.histogram(df, x=col,template=px_template,labels={col:f"{col} {schema.col_plot_labels[col]}"})
+    st.plotly_chart(fig)
+
+
+
 def benchmark_timelines(df):
     selected_time = ui.input_timeline(int(df['t'].min()), int(df['t'].max()))
     df = filter.by_time(selected_time, df)
@@ -59,61 +54,24 @@ def benchmark_timelines(df):
     col1,col2 = st.beta_columns(2)
     col = selected_metric
 
-    st.write(f"**{selected_metric} distribution**")
-    st.write(f"""
-- **N =  {df[selected_metric].count()}** companies
-- {time_to_string(selected_time)}
-""")
-
-    metric_hist(col, df, title="", xlabel=col)
+    st.subheader(f"**Bechmarking {selected_metric}**: {time_to_string(selected_time)} (N={df[selected_metric].count()})")
+    metric_hist(col, df, title=f"**{selected_metric} histogram **", xlabel=col)
 
     n = 5
-    st.write(f"Top {n} performers")
     df_top5 = df.sort_values(col,ascending=False).head(n)
-    #c = alt.Chart(df_top5).mark_bar().encode(
-    #    x='ticker',
-    #    y=col).properties(width=650, height=400)
-    c = alt.Chart(df_top5).mark_bar().encode(
-        alt.X('ticker',sort = alt.EncodingSortField(field=col, op="count", order='descending')),
-        y = col).properties(width=650,height=400
-    )
-    st.write(c)
+    st.subheader(f"Top {n} performers")
+    fig = px.bar(df_top5, x='ticker', y=col, template=px_template,labels={col:f"{col} {schema.col_plot_labels[col]}"})
+    st.plotly_chart(fig)
 
-    st.write(f"Bottom {n} performers")
+    st.subheader(f"Bottom {n} performers")
     df_bot5 = df[df[col]!=0]
     df_bot5 = df_bot5.sort_values(col, ascending=True).head(n)
-
-    c = alt.Chart(df_bot5).mark_bar().encode(
-        alt.X('ticker', sort=alt.EncodingSortField(field=col, op="count", order='ascending')),
-        y=col).properties(width=650, height=400
-                            )
-    st.write(c)
+    fig = px.bar(df_bot5, x='ticker', y=col, template=px_template,labels={col:f"{col} {schema.col_plot_labels[col]}"})
+    st.plotly_chart(fig)
 
     ui.output_table(selected_metric, df, 'Table')
     return
 
-def metric_hist(col,df,title,xlabel,st_col=False):
-    if use_pyplot:
-        fig, ax = plt.subplots(figsize=(4, 3))
-        num_bins = filter.get_optimal_hist_bin_size(col, df)
-        ax.hist(df[col], bins=num_bins)
-        ax.set_xlabel(xlabel)
-        ax.set_title(title)
-        #plt.figtext(0.1, 0.5, p(df[col].describe()))
-
-        if st_col:
-            st_col.pyplot(fig)
-        else:
-            st.pyplot(fig)
-    else:
-        c = alt.Chart(df).mark_bar().encode(
-            alt.X(col, bin=alt.Bin(extent=[0, 1200], step=50)),
-            alt.Y('count()'),
-        )
-        if st_col:
-            st_col.altair_chart(c)
-        else:
-            st.altair_chart(c)
 
 def cagr(s1,s0,t_in_q):
     return ((s1/s0)**(1/t_in_q)-1)*400
@@ -168,7 +126,6 @@ def benchmark_ranges(main_metric,df):
 def benchmarking_main(df):
     st.sidebar.write("## Analysis filters")
     df = filter.by_gtm(ui.input_gtm(schema.defined_gtm_types()), df)
-    st.write(df)
 
     selected_analysis = ui.input_analysis_type(schema.analysis_types)
     if selected_analysis == 'IPO timeline':
