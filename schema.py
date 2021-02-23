@@ -123,7 +123,7 @@ def tickers_by_gtm(gtm):
 
 #metrics = ['ARR','ARR growth','LTM Rev','Rev growth','GM','S&M%','LTM CAC','NDR']
 metrics = rev+growth+profit+efficiency
-analysis_types = ['IPO timeline', 'ARR range', 'Revenue range']
+analysis_types = ['Point in Time', 'Company', 'Revenue range']
 
 # Print stylized dataframe
 def pretty_print(df):

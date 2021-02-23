@@ -42,14 +42,17 @@ def sklearn_vif(exogs, data):
 
     return df_vif
 
+def _not_inplemented(m_df):
+    st.title("Coming soon!")
+
 
 def ui_toplevel_sidebar_navigation(m_df):
-    pages_dispatch = {'Single Company': single_company_worker,
-                      'IPO Benchmarking': benchmarking.benchmarking_main,
-                      'Time Series': time_series.time_series_main}
+    pages_dispatch = {'Timeline based': benchmarking.benchmarking_main,
+                      'Metric range based': _not_inplemented,
+                      'Regression analysis':_not_inplemented}
 
     st.sidebar.title("Navigation")
-    selection = st.sidebar.radio("Go to", list(pages_dispatch.keys()))
+    selection = st.sidebar.radio("Benchmarking:", list(pages_dispatch.keys()))
     return pages_dispatch[selection](m_df)
 
 def main():

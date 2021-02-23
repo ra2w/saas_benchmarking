@@ -14,7 +14,7 @@ def sidebar_select_gtm(gtm_options_list):
 
 @ui.register_plugin(name="input_analysis_type")
 def sidebar_select_analysis_type(list_of_anaysis_types):
-    selection = st.sidebar.selectbox("Index by:", list_of_anaysis_types)
+    selection = st.sidebar.selectbox("Analysis", list_of_anaysis_types)
     return selection
 
 """ UI Selectbox to filtering by Columns
@@ -34,13 +34,13 @@ growth = {'LTM Rev':'Rev growth',
 
 @ui.register_plugin(name="input_main_metric")
 def select_main_metric(list_of_metrics):
-    main_metric = st.selectbox('Target metric', list_of_metrics)
+    main_metric = st.sidebar.selectbox('Target metric', list_of_metrics)
     return main_metric
 
 @ui.register_plugin(name="input_bar_limit")
 def select_bar_limit(t_max):
     default = np.minimum(t_max,5)
-    bar_len = st.slider('Filter size', 1, int(t_max), 5)
+    bar_len = st.sidebar.slider('Panel width', 1, int(t_max), 10)
     return bar_len
 
 
@@ -49,16 +49,7 @@ def select_bar_limit(t_max):
 
 @ui.register_plugin(name="input_timeline")
 def sidebar_select_timeline(t_min,t_max) -> object:
-    selected_time = st.sidebar.slider('Pick a quarter to benchmark (t)', t_min, t_max, 0,key="timeline")
-    st.sidebar.info(
-        """
-        To make comparisons possible, all companies have been *indexed to a common timeline* where:
-
-        > **t = 0**: quarter in which a company goes public
-
-        > **t = &#177;x** : **x** quarters prior/following the IPO
-
-        """)
+    selected_time = st.sidebar.slider('Select quarter to benchmark (t)', t_min, t_max, 0,key="timeline")
     return selected_time
 
 """ Filtering by Metric Range
@@ -86,6 +77,12 @@ def _select_table_columns_to_display(topline_metric):
     selected_cols.append(st.selectbox('Profitability', schema.profit))
     selected_cols += schema.efficiency
     return selected_cols
+
+
+@ui.register_plugin(name="input_ticker")
+def sidebar_select_ticker(ticker_list):
+    ticker = st.sidebar.selectbox('Ticker:  ', ticker_list)
+    return ticker
 
 """ Display a dataframe with the right set of columns and column styles and field formats
 """
