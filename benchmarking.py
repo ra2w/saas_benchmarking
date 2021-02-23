@@ -1,16 +1,13 @@
-import pandas as pd
+import inflect
 import numpy as np
-from matplotlib import pyplot as plt
-import altair as alt
-import streamlit as st
+import pandas as pd
 import plotly.express as px
+import streamlit as st
 
-# local imports
-from schema import pretty_print as p
-import ui
 import filter
 import schema
-import inflect
+# local imports
+import ui
 
 # Available templates  ["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"]
 px_template = "plotly_dark"
@@ -38,7 +35,7 @@ def summary_statistics(df, metric, selected_time):
 def metric_hist(col, df, title, xlabel, st_col=False):
     if df[col].count() <= 2:
         return
-    st.subheader(title)
+    st.header(title)
     # summary_statistics(df,col,0)
     df_s = pd.DataFrame(df[col].describe()).T
     df_s = df_s.drop('count', axis=1)
@@ -51,55 +48,8 @@ def cagr(s1, s0, t_in_q):
     return ((s1 / s0) ** (1 / t_in_q) - 1) * 400
 
 
-def add_range_metrics(metric, df, df_range):
-    df_1 = pd.merge(df, df_range[['ticker', 't_x', 't_y']], on=['ticker'], how='inner')
-    df_1['ebit_in_range'] = np.where((df_1['t'] >= df_1['t_x']) & (df_1['t'] < df_1['t_y']),
-                                     df_1['EBIT'], 0)
-    df_1['opex_in_range'] = np.where((df_1['t'] >= df_1['t_x']) & (df_1['t'] < df_1['t_y']),
-                                     df_1['Opex'], 0)
-
-    df_2 = pd.DataFrame(df_1.groupby('ticker').sum()[['ebit_in_range', 'opex_in_range']])
-    df_range = pd.merge(df_range, df_2, on=['ticker'], how='inner')
-    df_range['CAGR'] = cagr(df_range[metric + '(1)'], df_range[metric + '(0)'],
-                            df_range['t_y'] - df_range['t_x'])
-    df_range = df_range.dropna(axis=0, subset=['CAGR'])
-    # Cap Ef. = NEW ARR(or Revenue) / opex in range
-    df_range['Cap Ef.'] = np.round(
-        ((df_range[metric + '(1)'] - df_range[metric + '(0)']) / df_range['opex_in_range']) * 100, 2)
-
-    df_range['Years'] = (df_range['t_y'] - df_range['t_x']) / 4
-
-    df_range = df_range.astype({'Years': 'float'})
-    return df_range
-
-
-def benchmark_ranges(main_metric, df):
-    st.write('Range analysis')
-    st.write(f"**{main_metric} distribution**")
-
-    selected_range = ui.input_metric_range(main_metric,
-                                           minmax_range=(50, 1300), step=10,
-                                           range1=(50, 100), range2=(100, 200), range3=(200, 1000))
-    df_range = filter.by_metric_range(main_metric, df, selected_range)
-
-    st.write(selected_range)
-
-    df_range = add_range_metrics(main_metric, df, df_range)
-    # summary_statistics(m_df, col, selected_time)
-    # metric_hist(col, df, title="", xlabel=col)
-    st.write(f"""
-            - **N =  {df_range['ticker'].nunique()}** companies
-            - from ${selected_range[0]}M to ${selected_range[1]}M
-            """)
-
-    metric_hist('CAGR', df_range, title="", xlabel='CAGR')
-    ui.output_table(main_metric, df_range, title='Table',
-                    cols=['Start Date', main_metric + '(0)', 'End Date', main_metric + '(1)',
-                          'CAGR', 'Years', 'Cap Ef.'])
-
-
-def ticker_bar_chart(ticker,df,col,n=10,top=True):
-    df_n = df[df['ticker'] != ticker].sort_values(col, ascending=not(top)).head(n)
+def ticker_bar_chart(ticker, df, col, n=10, top=True):
+    df_n = df[df['ticker'] != ticker].sort_values(col, ascending=not (top)).head(n)
     df_n = pd.concat([df[df['ticker'] == ticker], df_n])
     df_n['color'] = np.where(df_n['ticker'] == ticker, 'crimson', 'lightslategray')
     df_n = df_n.sort_values(col, ascending=False)
@@ -109,47 +59,66 @@ def ticker_bar_chart(ticker,df,col,n=10,top=True):
     return fig
 
 
-def benchmark_ticker_point_in_time(ticker,selected_metric, df):
+def benchmark_ticker_point_in_time(ticker, selected_metric, df):
+    st.markdown("---")
     container = st.beta_container()
-    selected_time = ui.input_timeline(int(df[df['ticker']==ticker]['t'].min()),
-                                      int(df[df['ticker']==ticker]['t'].max()))
+
+    t_min = int(df[df['ticker'] == ticker]['t'].min())
+    t_max = int(df[df['ticker'] == ticker]['t'].max())
+    selected_time = st.slider('Select quarter:',
+                              min_value=t_min, max_value=t_max, value=0, key="ticker_point_in_time")
+
     df = filter.by_time(selected_time, df)
 
     col = selected_metric
 
-    container.subheader(f"**{ticker} performance relative to peer group**")
+    container.header(f" **{selected_metric} ** {time_to_string(selected_time)} ")
 
+    container2 = st.beta_container()
     n = ui.input_bar_limit(df[col].count())
-    st.info(f"**Showing {selected_metric} {time_to_string(selected_time)} (N={df[selected_metric].count()})**")
+    container.info(f"**(N={df[selected_metric].count()} companies)**")
 
+    container.subheader(f"**{schema.ticker_to_name(ticker)} relative to Top {n}**")
+    fig = ticker_bar_chart(ticker, df, col, n, top=True)
+    container.plotly_chart(fig)
 
-    st.subheader(f"Relative to Top {n}")
-    fig=ticker_bar_chart(ticker,df,col,n,top=True)
-    st.plotly_chart(fig)
-
-    st.subheader(f"Performance against Bottom {n} in peer group")
+    st.subheader(f"**{schema.ticker_to_name(ticker)} relative to Bottom {n}**")
     fig = ticker_bar_chart(ticker, df, col, n, top=False)
     st.plotly_chart(fig)
 
-    metric_hist(col, df, title=f"**{selected_metric} histogram of peer group**", xlabel=col)
+    st.subheader(f"**Peer group {selected_metric}**")
+    metric_hist(col, df, title="", xlabel=col)
 
     ui.output_table(selected_metric, df, 'Table')
     return
 
 
 def bechmark_ticker_across_time(ticker, selected_metric, df):
+
+    st.header(f" **{selected_metric} over time** ({schema.ticker_to_name(ticker)})")
+    container = st.beta_container()
+
+    t_min = int(df[df['ticker'] == ticker]['t'].min())
+    t_max = int(df[df['ticker'] == ticker]['t'].max())
+    t_start = max(-4,t_min)
+    t_end = min(4,t_max)
+    selected_time = st.slider('Select time range:',
+                              min_value=t_min, max_value=t_max, value=(t_start,t_end), key="ticker_across_time")
+    df = filter.by_time(selected_time, df,range=True)
+
     df_c = df[df['ticker'] == ticker]
     df_c['median'] = df.groupby('t')[selected_metric].transform('median')
     df_c['top quartile'] = df.groupby('t')[selected_metric].transform(lambda x: x.quantile(.75))
     df_c['bot quartile'] = df.groupby('t')[selected_metric].transform(lambda x: x.quantile(.25))
 
-    df_plot = df_c[['t', selected_metric, 'median', 'top quartile', 'bot quartile']].melt(id_vars='t',
-                                                                                          var_name='Category',
-                                                                                          value_name=selected_metric)
 
-    fig = px.line(df_plot, x='t', y=selected_metric, template=px_template, line_dash='Category', color='Category',
+    df_plot = df_c[['t', selected_metric, 'median', 'top quartile', 'bot quartile']]
+    df_plot.rename(columns={selected_metric: ticker}, inplace=True)
+    df_plot = df_plot.melt(id_vars='t', var_name='Legend', value_name=selected_metric)
+
+    fig = px.line(df_plot, x='t', y=selected_metric, template=px_template, line_dash='Legend', color='Legend',
                   labels={selected_metric: f"{selected_metric} {schema.col_plot_labels[selected_metric]}"})
-    st.plotly_chart(fig)
+    container.plotly_chart(fig)
 
 
 def benchmarking_main(df):
@@ -158,7 +127,7 @@ def benchmarking_main(df):
 
     selected_metric = ui.input_main_metric(schema.metrics)
     ticker = ui.input_ticker(list(df['ticker'].unique()))
-    st.title(f"**Bechmarking {selected_metric} for {ticker}**")
+    st.title(f"**Bechmarking {schema.ticker_to_name(ticker)}**")
     st.info(
         """
         To make comparisons possible, all companies have been *indexed to a common timeline* where:
