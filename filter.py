@@ -20,8 +20,15 @@ def get_optimal_hist_bin_size(metric,df):
 def by_gtm(selected_gtm_option,df):
     return df[df['ticker'].isin(schema.tickers_by_gtm(selected_gtm_option))]
 
-def by_time(selected_time,df):
-    return df[df['t'] == selected_time]
+def by_time(selected_time,df,range=False):
+    if range:
+        t0 = selected_time[0]
+        t1 = selected_time[1]
+        assert(t1>=t0)
+        return df[(df['t'] >= t0) & (df['t'] <= t1)]
+    else:
+        return df[df['t'] == selected_time]
+
 
 
 def by_metric_range(metric,df,selected_range):

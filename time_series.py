@@ -109,5 +109,53 @@ def time_series_main(df):
     time_series_high_freq('ZM', df)
     foobar()
 
+# OLD STUFF
+
+def add_range_metrics(metric, df, df_range):
+    df_1 = pd.merge(df, df_range[['ticker', 't_x', 't_y']], on=['ticker'], how='inner')
+    df_1['ebit_in_range'] = np.where((df_1['t'] >= df_1['t_x']) & (df_1['t'] < df_1['t_y']),
+                                     df_1['EBIT'], 0)
+    df_1['opex_in_range'] = np.where((df_1['t'] >= df_1['t_x']) & (df_1['t'] < df_1['t_y']),
+                                     df_1['Opex'], 0)
+
+    df_2 = pd.DataFrame(df_1.groupby('ticker').sum()[['ebit_in_range', 'opex_in_range']])
+    df_range = pd.merge(df_range, df_2, on=['ticker'], how='inner')
+    df_range['CAGR'] = cagr(df_range[metric + '(1)'], df_range[metric + '(0)'],
+                            df_range['t_y'] - df_range['t_x'])
+    df_range = df_range.dropna(axis=0, subset=['CAGR'])
+    # Cap Ef. = NEW ARR(or Revenue) / opex in range
+    df_range['Cap Ef.'] = np.round(
+        ((df_range[metric + '(1)'] - df_range[metric + '(0)']) / df_range['opex_in_range']) * 100, 2)
+
+    df_range['Years'] = (df_range['t_y'] - df_range['t_x']) / 4
+
+    df_range = df_range.astype({'Years': 'float'})
+    return df_range
+
+
+def benchmark_ranges(main_metric, df):
+    st.write('Range analysis')
+    st.write(f"**{main_metric} distribution**")
+
+    selected_range = ui.input_metric_range(main_metric,
+                                           minmax_range=(50, 1300), step=10,
+                                           range1=(50, 100), range2=(100, 200), range3=(200, 1000))
+    df_range = filter.by_metric_range(main_metric, df, selected_range)
+
+    st.write(selected_range)
+
+    df_range = add_range_metrics(main_metric, df, df_range)
+    # summary_statistics(m_df, col, selected_time)
+    # metric_hist(col, df, title="", xlabel=col)
+    st.write(f"""
+            - **N =  {df_range['ticker'].nunique()}** companies
+            - from ${selected_range[0]}M to ${selected_range[1]}M
+            """)
+
+    metric_hist('CAGR', df_range, title="", xlabel='CAGR')
+    ui.output_table(main_metric, df_range, title='Table',
+                    cols=['Start Date', main_metric + '(0)', 'End Date', main_metric + '(1)',
+                          'CAGR', 'Years', 'Cap Ef.'])
+
 
 

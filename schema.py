@@ -121,6 +121,9 @@ def tickers_by_gtm(gtm):
     return meta_df[eval(gtm_filters[gtm])]['ticker']
 
 
+def ticker_to_name(ticker):
+    return meta_df[meta_df['ticker']==ticker].iloc[0]['name']
+
 #metrics = ['ARR','ARR growth','LTM Rev','Rev growth','GM','S&M%','LTM CAC','NDR']
 metrics = rev+growth+profit+efficiency
 analysis_types = ['Point in Time', 'Company', 'Revenue range']

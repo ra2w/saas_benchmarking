@@ -40,7 +40,7 @@ def select_main_metric(list_of_metrics):
 @ui.register_plugin(name="input_bar_limit")
 def select_bar_limit(t_max):
     default = np.minimum(t_max,5)
-    bar_len = st.sidebar.slider('Panel width', 1, int(t_max), 10)
+    bar_len = st.slider('Panel width', 1, int(t_max), 10)
     return bar_len
 
 
@@ -48,8 +48,9 @@ def select_bar_limit(t_max):
 """
 
 @ui.register_plugin(name="input_timeline")
-def sidebar_select_timeline(t_min,t_max) -> object:
-    selected_time = st.sidebar.slider('Select quarter to benchmark (t)', t_min, t_max, 0,key="timeline")
+def sidebar_select_timeline(t_min,t_max,key,value) -> object:
+
+    selected_time = st.slider('Select quarter to benchmark (t)', min_value=t_min, max_value=t_max, value=value,key=key)
     return selected_time
 
 """ Filtering by Metric Range
@@ -81,6 +82,7 @@ def _select_table_columns_to_display(topline_metric):
 
 @ui.register_plugin(name="input_ticker")
 def sidebar_select_ticker(ticker_list):
+    ticker_list.sort()
     ticker = st.sidebar.selectbox('Ticker:  ', ticker_list)
     return ticker
 
