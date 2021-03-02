@@ -11,6 +11,13 @@ import ui
 import filter
 import schema
 
+
+
+# Get CAGR from quarterly number
+def cagr_q(s1, s0, t_in_q):
+    assert t_in_q >= 0 or np.isnan(float(t_in_q))
+    return ((s1 / s0) ** (1 / t_in_q) - 1) * 400
+
 def plot_time_series_quantiles(main_metric,df_series):
     range_str = main_metric+'_range'
     a = df_series.groupby([range_str, 'hi_range']).describe()['CAGR'].reset_index()
@@ -133,29 +140,90 @@ def add_range_metrics(metric, df, df_range):
     return df_range
 
 
-def benchmark_ranges(main_metric, df):
+def benchmark_ranges(df):
     st.write('Range analysis')
-    st.write(f"**{main_metric} distribution**")
 
-    selected_range = ui.input_metric_range(main_metric,
-                                           minmax_range=(50, 1300), step=10,
-                                           range1=(50, 100), range2=(100, 200), range3=(200, 1000))
-    df_range = filter.by_metric_range(main_metric, df, selected_range)
+    st.sidebar.write("## Analysis filters")
+    df = filter.by_gtm(ui.input_gtm(schema.defined_gtm_types()), df)
 
-    st.write(selected_range)
+    selected_metric = ui.input_main_metric(schema.metrics)
+    ticker = ui.input_ticker(list(df['ticker'].unique()))
+    st.title(f"**Benchmarking {schema.ticker_to_name(ticker)}**")
+    df_c = df[df['ticker']==ticker]
+    df_c['type']='Actual'
 
-    df_range = add_range_metrics(main_metric, df, df_range)
-    # summary_statistics(m_df, col, selected_time)
-    # metric_hist(col, df, title="", xlabel=col)
-    st.write(f"""
-            - **N =  {df_range['ticker'].nunique()}** companies
-            - from ${selected_range[0]}M to ${selected_range[1]}M
-            """)
+    df_c=df_c[['ticker','t','ARR','ARR growth','type']]
 
-    metric_hist('CAGR', df_range, title="", xlabel='CAGR')
-    ui.output_table(main_metric, df_range, title='Table',
-                    cols=['Start Date', main_metric + '(0)', 'End Date', main_metric + '(1)',
-                          'CAGR', 'Years', 'Cap Ef.'])
+    def create_interpolation(row):
+        r = (cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']))/400
+        t_x = np.log(arr/row['ARR_p'])/np.log(1+r)
+        row['t']= row['t_p'] + t_x
+        row['ARR'] = arr
+        row['type']='Interpolated'
+        return row
 
 
+    arr_min = 100
+    arr_max = 2000
+    arr_increment = 50
+    arr_ranges = st.slider('Select ARR ranges', min_value=arr_min, max_value=arr_max,
+                          value=(100,200), step = arr_increment, key="arr_range_slider")
+    st.write(arr_ranges)
 
+    arr_ranges = range(arr_ranges[0],arr_ranges[1],arr_increment)
+
+    df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
+                       ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
+    for arr in arr_ranges:
+        df_t = df_c[(df_c['ARR']>arr) & (df_c['ARR'].shift(1)<arr)]
+
+        assert df_t.shape[0] <= 1
+        if df_t.shape[0] == 1:
+            new_row = create_interpolation(df_t.iloc[0])
+            df_c = df_c.append(new_row).sort_values('t',ascending=True)
+            df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
+                               ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
+
+
+
+    df_c['CAGR'] = df_c.apply(lambda row: cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']),axis=1)
+    df_c = df_c[['ticker', 't', 'ARR', 'CAGR','type']]
+    st.table(df_c)
+
+
+
+'''
+for a given range [l,h]
+
+case I:
+ 
+
+
+'''
+
+
+
+
+
+'''
+     selected_range = ui.input_metric_range(selected_metric,
+                                               minmax_range=(50, 1300), step=10,
+                                               range1=(50, 100), range2=(100, 200), range3=(200, 1000))
+        df_range = filter.by_metric_range(selected_metric, df, selected_range)
+    
+        st.write(selected_range)
+    
+        df_range = add_range_metrics(selected_metric, df, df_range)
+        # summary_statistics(m_df, col, selected_time)
+        # metric_hist(col, df, title="", xlabel=col)
+        st.write(f"""
+                - **N =  {df_range['ticker'].nunique()}** companies
+                - from ${selected_range[0]}M to ${selected_range[1]}M
+                """)
+    
+        #metric_hist('CAGR', df_range, title="", xlabel='CAGR')
+        #ui.output_table(main_metric, df_range, title='Table',
+        #                cols=['Start Date', main_metric + '(0)', 'End Date', main_metric + '(1)',
+        #                      'CAGR', 'Years', 'Cap Ef.'])
+    
+'''

@@ -93,7 +93,7 @@ def benchmark_ticker_point_in_time(ticker, selected_metric, df):
     return
 
 
-def bechmark_ticker_across_time(ticker, selected_metric, df):
+def bechmark_ticker_timeseries(ticker, selected_metric, df):
 
     st.header(f" **{selected_metric} over time** ({schema.ticker_to_name(ticker)})")
     container = st.beta_container()
@@ -137,8 +137,10 @@ def benchmarking_main(df):
         > **t = &#177;x** : **x** quarters prior/following the IPO
 
         """)
-    bechmark_ticker_across_time(ticker, selected_metric, df)
+    bechmark_ticker_timeseries(ticker, selected_metric, df)
     benchmark_ticker_point_in_time(ticker, selected_metric, df)
+
+
 
 
 """

@@ -162,11 +162,18 @@ def transform_dataset(df):
     df = df[projected_cols]
     return df
 
+def error_correct_ticker(df):
+    # We remove any data point that has a missing or zero ARR amount
+    df = df[(df['ARR'].notna()) & (df['ARR']!=0)]
+
+    return df
 def load_dataset():
     dict_of_dfs = etl.load_companies_refactored(meta_df)
 
     dict_of_dfs_post = {ticker: transform_dataset(df) for (ticker,df) in dict_of_dfs.items()}
-    _m = pd.concat(dict_of_dfs_post, axis=0, keys=dict_of_dfs_post.keys())
+    dict_of_dfs_post_validated = {ticker: error_correct_ticker(df) for (ticker, df) in dict_of_dfs_post.items()}
+
+    _m = pd.concat(dict_of_dfs_post_validated, axis=0, keys=dict_of_dfs_post.keys())
     _m.index.set_names(['ticker','t'], inplace=True)
     _m = _m.reset_index()
     return _m

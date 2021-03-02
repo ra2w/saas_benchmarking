@@ -11,7 +11,7 @@ import streamlit_ui
 import filter
 import benchmarking
 import ui
-import time_series
+import ranges
 
 
 def sklearn_vif(exogs, data):
@@ -48,7 +48,7 @@ def _not_inplemented(m_df):
 
 def ui_toplevel_sidebar_navigation(m_df):
     pages_dispatch = {'Timeline based': benchmarking.benchmarking_main,
-                      'Metric range based': _not_inplemented,
+                      'Metric range based': ranges.benchmark_ranges,
                       'Regression analysis':_not_inplemented}
 
     st.sidebar.title("Navigation")
@@ -92,7 +92,7 @@ if st.sidebar.button("Reload modules"):
     importlib.reload(streamlit_ui)
     importlib.reload(filter)
     importlib.reload(benchmarking)
-    importlib.reload(time_series)
+    importlib.reload(ranges)
 
     st.experimental_rerun()
 

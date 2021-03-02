@@ -238,10 +238,9 @@ def set_ipo_timelines(ticker, df, ipo_month, ipo_year):
 
     df['error'] = (df['month'] - ipo_month) % 3
     if df['error'].sum() != 0:
-        st.write("Error: Invalid quater month ", df['month'])
+        st.write("Error: Invalid quarter month ", df['month'])
     df['quarter'] = (df['month'] - ipo_month) / 3
-    df['t'] = df['year'] * 4 + df[
-        'quarter']  # y=quarters since IPO. +x = x quarters after IPO, -x = x quarters before IPO
+    df['t'] = df['year'] * 4 + df['quarter']  # y=quarters since IPO. +x = x quarters after IPO, -x = x quarters before IPO
     df.drop(['error', 'month', 'year'], 1, inplace=True)
     return df
 
