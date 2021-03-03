@@ -139,8 +139,93 @@ def add_range_metrics(metric, df, df_range):
     df_range = df_range.astype({'Years': 'float'})
     return df_range
 
+def benchmark_ranges_for_ticker(df_c,arr_range_interval):
+
+
+    def create_interpolation(row):
+        r = (cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']))/400
+        t_x = np.log(arr/row['ARR_p'])/np.log(1+r)
+        row['t']= row['t_p'] + t_x
+        row['ARR'] = arr
+        row['type']='Interpolated'
+        return row
+
+
+
+
+    #arr_ranges = st.slider('Select ARR ranges', min_value=arr_min, max_value=arr_max,
+    #                      value=(100,200), step = arr_increment, key="arr_range_slider")
+
+    #st.write(f"ARR ranges = {arr_range_interval}")
+
+    df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
+                       ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
+
+    for arr in list(arr_range_interval.left):
+        df_t = df_c[(df_c['ARR']>arr) & (df_c['ARR'].shift(1)<arr)]
+
+        #assert df_t.shape[0] <= 1
+        if df_t.shape[0] > 1:
+            st.write(f"Houston we have a problem! {arr}")
+            st.table(df_t)
+        if df_t.shape[0] == 1:
+            new_row = create_interpolation(df_t.iloc[0])
+            df_c = df_c.append(new_row).sort_values('t',ascending=True)
+            df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
+                               ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
+
+
+
+    df_c['CAGR'] = df_c.apply(lambda row: cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']),axis=1)
+    df_c = df_c[['ticker', 't', 'ARR', 'CAGR','type']]
+
+    rdf = pd.DataFrame(columns=list(arr_range_interval))
+    return_dict = {}
+    for i in arr_range_interval:
+        low = i.left
+        hi = i.right
+        low_df = df_c[df_c['ARR'] == low]
+        hi_df = df_c[df_c['ARR'] == hi]
+
+        #assert low_df.shape[0] <= 1
+        #assert hi_df.shape[0] <= 1
+
+        if low_df.shape[0] == 1 and hi_df.shape[0] == 1:
+            t0 = low_df['t'].iloc[0]
+            t1 = hi_df['t'].iloc[0]
+
+            #st.write(f"It took  {(t1-t0):.2f} quarters to go from ${low}M to ${hi}M   ")
+            return_dict[str(i)]=t1-t0
+
+    rdf = pd.DataFrame.from_records([return_dict])
+    return rdf
+
 
 def benchmark_ranges(df):
+    st.write('Range analysis')
+
+    st.sidebar.write("## Analysis filters")
+    df = filter.by_gtm(ui.input_gtm(schema.defined_gtm_types()), df)
+
+    #df = df[(df['ticker']=='DDOG') | (df['ticker']=='CRM')]
+    df['type'] = 'Actual'
+    df=df[['ticker','t','ARR','ARR growth','type']]
+
+    arr_min = 100
+    arr_max = 400
+    arr_increment = 50
+    arr_range_interval = pd.interval_range(start=arr_min,end=arr_max, freq=arr_increment)
+    rdf = df.groupby('ticker').apply(benchmark_ranges_for_ticker,
+                                     arr_range_interval = arr_range_interval)
+    st.table(rdf)
+    st.write("End: Benchmark ranges")
+
+
+    #ticker = ui.input_ticker(list(df['ticker'].unique()))
+    #st.title(f"**Benchmarking {schema.ticker_to_name(ticker)}**")
+    #df_c = df[df['ticker'] == ticker]
+
+def benchmark_ranges_old(df):
     st.write('Range analysis')
 
     st.sidebar.write("## Analysis filters")
@@ -170,7 +255,7 @@ def benchmark_ranges(df):
                           value=(100,200), step = arr_increment, key="arr_range_slider")
     st.write(arr_ranges)
 
-    arr_ranges = range(arr_ranges[0],arr_ranges[1],arr_increment)
+    arr_ranges = range(arr_ranges[0],arr_ranges[1]+arr_increment,arr_increment)
 
     df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
                        ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
@@ -191,39 +276,19 @@ def benchmark_ranges(df):
     st.table(df_c)
 
 
+    for arr in arr_ranges:
+        low = arr
+        hi = low+arr_increment
+        low_df = df_c[df_c['ARR']==low]
+        hi_df = df_c[df_c['ARR'] == hi]
 
-'''
-for a given range [l,h]
+        assert low_df.shape[0] <= 1
+        assert hi_df.shape[0] <= 1
 
-case I:
- 
+        if low_df.shape[0] == 1 and hi_df.shape[0] == 1:
+            t0 = low_df['t'].iloc[0]
+            t1 = hi_df['t'].iloc[0]
 
-
-'''
-
-
+            st.write(f"It took {ticker} {(t1-t0):.2f} quarters to go from ${low}M to ${hi}M   ")
 
 
-
-'''
-     selected_range = ui.input_metric_range(selected_metric,
-                                               minmax_range=(50, 1300), step=10,
-                                               range1=(50, 100), range2=(100, 200), range3=(200, 1000))
-        df_range = filter.by_metric_range(selected_metric, df, selected_range)
-    
-        st.write(selected_range)
-    
-        df_range = add_range_metrics(selected_metric, df, df_range)
-        # summary_statistics(m_df, col, selected_time)
-        # metric_hist(col, df, title="", xlabel=col)
-        st.write(f"""
-                - **N =  {df_range['ticker'].nunique()}** companies
-                - from ${selected_range[0]}M to ${selected_range[1]}M
-                """)
-    
-        #metric_hist('CAGR', df_range, title="", xlabel='CAGR')
-        #ui.output_table(main_metric, df_range, title='Table',
-        #                cols=['Start Date', main_metric + '(0)', 'End Date', main_metric + '(1)',
-        #                      'CAGR', 'Years', 'Cap Ef.'])
-    
-'''
