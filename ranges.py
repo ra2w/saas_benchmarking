@@ -12,12 +12,6 @@ import filter
 import schema
 
 
-
-# Get CAGR from quarterly number
-def cagr_q(s1, s0, t_in_q):
-    assert t_in_q >= 0 or np.isnan(float(t_in_q))
-    return ((s1 / s0) ** (1 / t_in_q) - 1) * 400
-
 def plot_time_series_quantiles(main_metric,df_series):
     range_str = main_metric+'_range'
     a = df_series.groupby([range_str, 'hi_range']).describe()['CAGR'].reset_index()
@@ -139,156 +133,47 @@ def add_range_metrics(metric, df, df_range):
     df_range = df_range.astype({'Years': 'float'})
     return df_range
 
-def benchmark_ranges_for_ticker(df_c,arr_range_interval):
+# Get CAGR from quarterly number
+def cagr_q(end_arr, start_arr, t_in_q):
+    #assert t_in_q >= 0 or np.isnan(float(t_in_q))
+    return ((end_arr / start_arr) ** (1 / t_in_q) - 1) * 400
+
+def time_between_arr_ranges(end_arr,start_arr,r):
+    return np.log(end_arr / start_arr) / np.log(1 + r/400)
+
+def interpolate_arr(df,arr_i):
+    df = df[(df['ARR_p'] < arr_i) & (df['ARR'] >= arr_i)]
+    df['ARR_i'] = arr_i
+    r = cagr_q(end_arr=df['ARR'],start_arr=df['ARR_p'],t_in_q=df['t']-df['t_p'])
+    df['t_i'] = df['t']-time_between_arr_ranges(end_arr=df['ARR'],start_arr=df['ARR_i'],r=r)
+    return df
 
 
-    def create_interpolation(row):
-        r = (cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']))/400
-        t_x = np.log(arr/row['ARR_p'])/np.log(1+r)
-        row['t']= row['t_p'] + t_x
-        row['ARR'] = arr
-        row['type']='Interpolated'
-        return row
-
-
-
-
-    #arr_ranges = st.slider('Select ARR ranges', min_value=arr_min, max_value=arr_max,
-    #                      value=(100,200), step = arr_increment, key="arr_range_slider")
-
-    #st.write(f"ARR ranges = {arr_range_interval}")
-
-    df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
-                       ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
-
-    for arr in list(arr_range_interval.left):
-        df_t = df_c[(df_c['ARR']>arr) & (df_c['ARR'].shift(1)<arr)]
-
-        #assert df_t.shape[0] <= 1
-        if df_t.shape[0] > 1:
-            st.write(f"Houston we have a problem! {arr}")
-            st.table(df_t)
-        if df_t.shape[0] == 1:
-            new_row = create_interpolation(df_t.iloc[0])
-            df_c = df_c.append(new_row).sort_values('t',ascending=True)
-            df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
-                               ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
-
-
-
-    df_c['CAGR'] = df_c.apply(lambda row: cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']),axis=1)
-    df_c = df_c[['ticker', 't', 'ARR', 'CAGR','type']]
-
-    rdf = pd.DataFrame(columns=list(arr_range_interval))
-    return_dict = {}
-    for i in arr_range_interval:
-        low = i.left
-        hi = i.right
-        low_df = df_c[df_c['ARR'] == low]
-        hi_df = df_c[df_c['ARR'] == hi]
-
-        #assert low_df.shape[0] <= 1
-        #assert hi_df.shape[0] <= 1
-
-        if low_df.shape[0] == 1 and hi_df.shape[0] == 1:
-            t0 = low_df['t'].iloc[0]
-            t1 = hi_df['t'].iloc[0]
-
-            #st.write(f"It took  {(t1-t0):.2f} quarters to go from ${low}M to ${hi}M   ")
-            return_dict[str(i)]=t1-t0
-
-    rdf = pd.DataFrame.from_records([return_dict])
-    return rdf
-
-
-def benchmark_ranges(df):
+def benchmark_arr_ranges(df):
     st.write('Range analysis')
 
     st.sidebar.write("## Analysis filters")
     df = filter.by_gtm(ui.input_gtm(schema.defined_gtm_types()), df)
 
-    #df = df[(df['ticker']=='DDOG') | (df['ticker']=='CRM')]
-    df['type'] = 'Actual'
-    df=df[['ticker','t','ARR','ARR growth','type']]
+    df[['ARR_p', 't_p']] = df.groupby('ticker')[['ARR', 't']].shift(1)
+    df[['ARR_n', 't_n']] = df.groupby('ticker')[['ARR', 't']].shift(-1)
 
-    arr_min = 100
-    arr_max = 400
-    arr_increment = 50
-    arr_range_interval = pd.interval_range(start=arr_min,end=arr_max, freq=arr_increment)
-    rdf = df.groupby('ticker').apply(benchmark_ranges_for_ticker,
-                                     arr_range_interval = arr_range_interval)
-    st.table(rdf)
-    st.write("End: Benchmark ranges")
+    #df = df[(df['ticker'] == 'DDOG') | (df['ticker'] == 'ESTC')]
+    #df = df[df['ticker']=='PANW']
+    df = df[['ticker', 'date','t', 'ARR', 'ARR_p', 't_p', 'ARR_n', 't_n']]
+    st.table(df)
+    arr_begin,arr_end = st.slider('Select ARR ranges', min_value=50, max_value=3000,
+                           value=(100, 200), step=50, key="arr_range_slider")
+    st.write(arr_begin,arr_end)
 
-
-    #ticker = ui.input_ticker(list(df['ticker'].unique()))
-    #st.title(f"**Benchmarking {schema.ticker_to_name(ticker)}**")
-    #df_c = df[df['ticker'] == ticker]
-
-def benchmark_ranges_old(df):
-    st.write('Range analysis')
-
-    st.sidebar.write("## Analysis filters")
-    df = filter.by_gtm(ui.input_gtm(schema.defined_gtm_types()), df)
-
-    selected_metric = ui.input_main_metric(schema.metrics)
-    ticker = ui.input_ticker(list(df['ticker'].unique()))
-    st.title(f"**Benchmarking {schema.ticker_to_name(ticker)}**")
-    df_c = df[df['ticker']==ticker]
-    df_c['type']='Actual'
-
-    df_c=df_c[['ticker','t','ARR','ARR growth','type']]
-
-    def create_interpolation(row):
-        r = (cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']))/400
-        t_x = np.log(arr/row['ARR_p'])/np.log(1+r)
-        row['t']= row['t_p'] + t_x
-        row['ARR'] = arr
-        row['type']='Interpolated'
-        return row
-
-
-    arr_min = 100
-    arr_max = 2000
-    arr_increment = 50
-    arr_ranges = st.slider('Select ARR ranges', min_value=arr_min, max_value=arr_max,
-                          value=(100,200), step = arr_increment, key="arr_range_slider")
-    st.write(arr_ranges)
-
-    arr_ranges = range(arr_ranges[0],arr_ranges[1]+arr_increment,arr_increment)
-
-    df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
-                       ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
-    for arr in arr_ranges:
-        df_t = df_c[(df_c['ARR']>arr) & (df_c['ARR'].shift(1)<arr)]
-
-        assert df_t.shape[0] <= 1
-        if df_t.shape[0] == 1:
-            new_row = create_interpolation(df_t.iloc[0])
-            df_c = df_c.append(new_row).sort_values('t',ascending=True)
-            df_c = df_c.assign(ARR_p=df_c['ARR'].shift(1), t_p=df_c['t'].shift(1),
-                               ARR_n=df_c['ARR'].shift(-1), t_n=df_c['t'].shift(-1))
-
-
-
-    df_c['CAGR'] = df_c.apply(lambda row: cagr_q(row['ARR'],row['ARR_p'],row['t']-row['t_p']),axis=1)
-    df_c = df_c[['ticker', 't', 'ARR', 'CAGR','type']]
-    st.table(df_c)
-
-
-    for arr in arr_ranges:
-        low = arr
-        hi = low+arr_increment
-        low_df = df_c[df_c['ARR']==low]
-        hi_df = df_c[df_c['ARR'] == hi]
-
-        assert low_df.shape[0] <= 1
-        assert hi_df.shape[0] <= 1
-
-        if low_df.shape[0] == 1 and hi_df.shape[0] == 1:
-            t0 = low_df['t'].iloc[0]
-            t1 = hi_df['t'].iloc[0]
-
-            st.write(f"It took {ticker} {(t1-t0):.2f} quarters to go from ${low}M to ${hi}M   ")
-
+    select_cols = ['ticker','t_i','ARR_i']
+    df_i1 = interpolate_arr(df, arr_begin)[select_cols]
+    st.write(df_i1['ticker'].nunique())
+    df_i2 = interpolate_arr(df, arr_end)[select_cols]
+    st.write(df_i2['ticker'].nunique())
+    df_i2['t_min'] = df_i2.groupby('ticker')['t_i'].transform('min') # Find the earliest time a company hits arr_end
+    df_m = pd.merge(df_i1,df_i2,on='ticker',how='inner',suffixes=('_lo', '_hi'))
+    df_m = df_m[(df_m['t_i_lo']<df_m['t_min']) & (df_m['t_i_hi']==df_m['t_min'])]
+    df_m['CAGR']=cagr_q(df_m['ARR_i_hi'],df_m['ARR_i_lo'], df_m['t_i_hi']-df_m['t_i_lo'])
+    st.table(df_m)
 

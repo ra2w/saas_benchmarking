@@ -134,7 +134,7 @@ def pretty_print(df):
 
 def load_metadata(filename = 'data/company_db.csv'):
     global meta_df
-    tickers_to_exclude = ['SYMC', 'GDDY', 'CARB', 'RP','NTNX','RNG','SWI']
+    tickers_to_exclude = ['SYMC', 'GDDY', 'CARB', 'RP','NTNX','RNG','SWI','PANW']
     meta_df = pd.read_csv(filename)
     for i in tickers_to_exclude:
         meta_df = meta_df[meta_df.ticker != i]

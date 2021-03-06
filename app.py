@@ -48,7 +48,7 @@ def _not_inplemented(m_df):
 
 def ui_toplevel_sidebar_navigation(m_df):
     pages_dispatch = {'Timeline based': benchmarking.benchmarking_main,
-                      'Metric range based': ranges.benchmark_ranges,
+                      'Metric range based': ranges.benchmark_arr_ranges,
                       'Regression analysis':_not_inplemented}
 
     st.sidebar.title("Navigation")
