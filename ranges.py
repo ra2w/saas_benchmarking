@@ -142,12 +142,41 @@ def time_between_arr_ranges(end_arr,start_arr,r):
     return np.log(end_arr / start_arr) / np.log(1 + r/400)
 
 def interpolate_arr(df,arr_i):
-    df = df[(df['ARR_p'] < arr_i) & (df['ARR'] >= arr_i)]
-    df['ARR_i'] = arr_i
-    r = cagr_q(end_arr=df['ARR'],start_arr=df['ARR_p'],t_in_q=df['t']-df['t_p'])
-    df['t_i'] = df['t']-time_between_arr_ranges(end_arr=df['ARR'],start_arr=df['ARR_i'],r=r)
+    '''
+    With 'cond' we filter for two things:
+        (1.) Only data points with +ve growth (i.e ARR > ARR_p or ARR(t) > ARR(t-1))
+        (2.) ARR has equaled or broken our ARR threshold (i.e ARR > arr_i)
+    Implications:
+        (1.) We ignore data points where growth is negative, because that means at some point earlier the ARR already crossed our threshold
+        (2.) t_i <= t (because arr_i <= ARR)
+    '''
+    cond = (df['ARR_p'] < arr_i) & (df['ARR'] >= arr_i)
+    df.loc[cond,'ARR_i']= arr_i
+    r = cagr_q(end_arr=df['ARR'], start_arr=df['ARR_p'], t_in_q=df['t'] - df['t_p'])
+    df.loc[cond,'t_i'] = df.loc[cond,'t_i'] - time_between_arr_ranges(end_arr=df['ARR'], start_arr=df['ARR_i'], r=r)
     return df
 
+def compute_range_metrics(df_c,arr_begin,arr_end):
+    df_c['t_i']=df_c['t']
+    df_c = interpolate_arr(df_c,arr_begin)
+    df_c = interpolate_arr(df_c,arr_end)
+
+    # t_max = the last time point we're interested in because it represents the earliest time where ticker crossed arr_end
+    t_max= df_c[df_c['ARR_i']==arr_end]['t_i'].min()
+    # t_min = latest time point where ticker crossed arr_begin
+    t_min = df_c[(df_c['ARR_i']==arr_begin) & (df_c['t_i']<t_max)]['t_i'].max()
+    df_c = df_c[(df_c['t_i']>=t_min) & (df_c['t_i']<=t_max)]
+
+    assert df_c['ARR_i'].count() <= 2
+    assert df_c[df_c['ARR_i'] == arr_begin]['ARR_i'].count() <= 1
+    assert df_c[df_c['ARR_i'] == arr_end]['ARR_i'].count() <= 1
+
+    #st.table(df_c)
+    #st.write(t_min,t_max)
+    return pd.Series({'ARR range':pd.Interval(arr_begin,arr_end),
+                      'CAGR':cagr_q(arr_end, arr_begin,t_max-t_min),
+                      'Time (Quarters)':t_max-t_min})
+import time
 
 def benchmark_arr_ranges(df):
     st.write('Range analysis')
@@ -159,21 +188,36 @@ def benchmark_arr_ranges(df):
     df[['ARR_n', 't_n']] = df.groupby('ticker')[['ARR', 't']].shift(-1)
 
     #df = df[(df['ticker'] == 'DDOG') | (df['ticker'] == 'ESTC')]
-    #df = df[df['ticker']=='PANW']
+    #df = df[df['ticker']=='ESTC']
     df = df[['ticker', 'date','t', 'ARR', 'ARR_p', 't_p', 'ARR_n', 't_n']]
-    st.table(df)
+    df_2 = df
     arr_begin,arr_end = st.slider('Select ARR ranges', min_value=50, max_value=3000,
                            value=(100, 200), step=50, key="arr_range_slider")
     st.write(arr_begin,arr_end)
 
-    select_cols = ['ticker','t_i','ARR_i']
-    df_i1 = interpolate_arr(df, arr_begin)[select_cols]
-    st.write(df_i1['ticker'].nunique())
-    df_i2 = interpolate_arr(df, arr_end)[select_cols]
-    st.write(df_i2['ticker'].nunique())
-    df_i2['t_min'] = df_i2.groupby('ticker')['t_i'].transform('min') # Find the earliest time a company hits arr_end
-    df_m = pd.merge(df_i1,df_i2,on='ticker',how='inner',suffixes=('_lo', '_hi'))
-    df_m = df_m[(df_m['t_i_lo']<df_m['t_min']) & (df_m['t_i_hi']==df_m['t_min'])]
-    df_m['CAGR']=cagr_q(df_m['ARR_i_hi'],df_m['ARR_i_lo'], df_m['t_i_hi']-df_m['t_i_lo'])
-    st.table(df_m)
+    #df.set_index(['ticker','ARR','ARR_p'],inplace=True)
+    #st.table(df)
+    df_plot = pd.DataFrame(columns=['ARR range','CAGR','Time (Quarters)'])
+    st.table(df_plot)
+    arr_range=pd.interval_range(arr_begin,arr_end,freq=50)
+    df_list = [df_plot]
+    total = 0
+    cnt = 0
+    for i in arr_range:
+        a0 = i.left
+        a1 = i.right
+        s0 = time.time()
+        df_r = df.groupby('ticker',as_index=False)\
+            .apply(compute_range_metrics, arr_begin=i.left, arr_end=i.right)\
+            .dropna(axis=0, how='any')\
+            .sort_values('CAGR', ascending=False)
+        s1 = time.time()
+        total = total + s1-s0
+        cnt = cnt+1
+        df_list.append(df_r)
 
+    st.write(total)
+    st.write(cnt)
+    st.write(total/cnt)
+    df_plot=pd.concat(df_list)
+    st.table(df_plot)
