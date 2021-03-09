@@ -153,7 +153,6 @@ def compute_range_metrics_outer(df_c, arr_range, df_arr_index):
     rdf = pd.DataFrame.from_dict(data={'ARR range': c0, 'CAGR': c1})
     rdf['ARR range'] = rdf['ARR range'].astype('str')
     rdf = rdf.set_index('ARR range')
-    # st.table(rdf)
     return rdf
 
 
