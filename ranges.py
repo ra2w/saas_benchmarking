@@ -3,11 +3,14 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from vega_datasets import data
+import functools
 
 import filter
 import schema
 # local imports
 import ui
+import finance as fin
+
 
 
 def plot_time_series_quantiles(main_metric, df_series):
@@ -135,20 +138,6 @@ def add_range_metrics(metric, df, df_range):
     return df_range
 
 
-# Get CAGR from quarterly number
-def cagr_q(end_arr, start_arr, t_in_q):
-    # assert t_in_q >= 0 or np.isnan(float(t_in_q))
-    return ((end_arr / start_arr) ** (1 / t_in_q) - 1) * 400
-
-
-def time_between_arr_ranges(end_arr, start_arr, r):
-    return np.log(end_arr / start_arr) / np.log(1 + r / 400)
-
-
-def interpolate_arr(arr, arr_p, t_in_q, arr_i):
-    r = cagr_q(end_arr=arr, start_arr=arr_p, t_in_q=t_in_q)
-    t_x = time_between_arr_ranges(end_arr=arr, start_arr=arr_i, r=r)
-    return t_x
 
 
 def compute_range_metrics_outer(df_c, arr_range, df_arr_index):
@@ -158,7 +147,7 @@ def compute_range_metrics_outer(df_c, arr_range, df_arr_index):
     # df_c = df_c.sort_index()
     # st.table(df_c)
     for i in arr_range:
-        cagr = compute_range_metrics(ticker, df_c, i.left, i.right, df_arr_index)
+        cagr = compute_cagr_for_marker_range(ticker, df_c, i.left, i.right, df_arr_index)
         c0.append(i)
         c1.append(cagr)
     rdf = pd.DataFrame.from_dict(data={'ARR range': c0, 'CAGR': c1})
@@ -168,63 +157,64 @@ def compute_range_metrics_outer(df_c, arr_range, df_arr_index):
     return rdf
 
 
-def compute_range_metrics(ticker, df_c, arr_begin, arr_end, df_arr_index):
+def compute_cagr_for_marker_range(ticker, df_c, arr_ix0, arr_ix1, df_metric_index):
     global c_time
 
-    if arr_begin not in df_arr_index.index or arr_end not in df_arr_index.index:
+    r0_num = arr_marker_to_row_num(ticker, df_metric_index, arr_ix0)
+    r1_num = arr_marker_to_row_num(ticker, df_metric_index, arr_ix1)
+
+    if pd.isna(r0_num) or pd.isna(r1_num):
         return np.NaN
 
-    # st.table(df_c)
-
-    t_begin = df_arr_index.loc[arr_begin, ticker]
-    t_end = df_arr_index.loc[arr_end, ticker]
-
-    if pd.isna(t_begin) or pd.isna(t_end):
-        return np.NaN
-
-    row = df_c.loc[(ticker, t_begin), :]
     a = timeit.default_timer()
-    arr = row['ARR']
-    arr_p = row['ARR_p']
-    t_in_q = t_begin - row['t_p']
+    row0 = df_c.loc[(ticker, r0_num), :]
+    row1 = df_c.loc[(ticker, r1_num), :]
 
-    t_x0 = t_begin - interpolate_arr(arr, arr_p, t_in_q, arr_begin)
+    r0 = fin.cagr_q(end_arr=row0['ARR'],start_arr=row0['ARR_p'],t_in_q = row0['t'] - row0['t_p'])
+    t_ix0 = row0['t'] - fin.time_between_arr_ranges(end_arr=row0['ARR'],start_arr=arr_ix0,r=r0)
+    r1 = fin.cagr_q(end_arr=row1['ARR'], start_arr=row1['ARR_p'], t_in_q=row1['t'] - row1['t_p'])
+    t_ix1 = row1['t'] - fin.time_between_arr_ranges(end_arr=row1['ARR'],start_arr=arr_ix1,r=r1)
 
-    row = df_c.loc[(ticker, t_end), :]
-    arr = row['ARR']
-    arr_p = row['ARR_p']
-    t_in_q = t_end - row['t_p']
-    t_x1 = t_end - interpolate_arr(arr, arr_p, t_in_q, arr_end)
 
-    # return cagr_q(arr_end, arr_begin,t_x1-t_x0)
-    # return {'ARR range':pd.Interval(arr_begin,arr_end),
-    #                  'CAGR':cagr_q(arr_end, arr_begin,t_x1-t_x0),
-    #                  'Time (Quarters)':t_x1-t_x0}
-
-    # return (pd.Interval(arr_begin,arr_end),
-    #        cagr_q(arr_end, arr_begin,t_x1-t_x0),
-    #        t_x1-t_x0)
     a = timeit.default_timer() - a
     c_time = c_time + a
-    cagr = cagr_q(arr_end, arr_begin, t_x1 - t_x0)
-    return cagr
+    range_cagr = fin.cagr_q(arr_ix1, arr_ix0, t_ix1 - t_ix0)
+    return range_cagr
 
 
-def compute_arr_ranges(df):
-    df['ARR_rnd_down'] = np.floor(df['ARR'] / 50) * 50
-    df['ARR_p_rnd_up'] = np.ceil(df['ARR_p'] / 50) * 50
+def create_metric_markers(df,metric='ARR'):
+    if metric != 'ARR':
+        raise NotImplementedError
+
+    m0 = metric+'_lo'
+    m1 = metric+'_hi'
+    df[m1] = np.floor(df['ARR'] / 50) * 50
+    df[m0] = np.floor((df['ARR_p']+50) / 50) * 50
 
     def create_interval(row):
         if np.isnan(row['ARR_p']) or \
                 np.isnan(row['ARR']) or \
-                row['ARR_p_rnd_up'] > row['ARR_rnd_down']:
+                row[m0] > row[m1]:
             return list(range(0, 0))
 
-        return list(range(int(row['ARR_p_rnd_up']), int(row['ARR_rnd_down']) + 50, 50))
+        return list(range(int(row[m0]), int(row[m1]) + 50, 50))
 
-    df['range'] = df.apply(create_interval, axis=1).astype('object')
-    return df
+    return df.apply(create_interval, axis=1).astype('object')
 
+
+def marker_to_row_num(metric_name,ticker,df_metric_index,metric_value):
+    if metric_name != 'ARR':
+        raise NotImplementedError
+
+    if metric_value not in df_metric_index.index:
+        return np.NaN
+
+    return df_metric_index.loc[metric_value, ticker]
+
+arr_marker_to_row_num = functools.partial(marker_to_row_num, 'ARR')
+
+
+import timeit
 
 def benchmark_arr_ranges(df):
     global c_time
@@ -239,132 +229,31 @@ def benchmark_arr_ranges(df):
 
 
     # df = df[(df['ticker'] == 'DDOG') | (df['ticker'] == 'ESTC')]
-    # df = df[df['ticker']=='ESTC']
+    #df = df[df['ticker']=='CRM']
     df = df[['ticker', 'date', 't', 'ARR', 'ARR_p', 't_p']]
+    df = df.sort_values(['ticker','t'],ascending=True)
+    df['row_num'] = range(len(df))
+
     arr_begin, arr_end = st.slider('Select ARR ranges', min_value=50, max_value=3000,
                                    value=(100, 200), step=50, key="arr_range_slider")
 
-    df_arr_index = compute_arr_ranges(df).explode('range').groupby(['ticker', 'range'])['t'].min().unstack(0)
+    df['arr_marker'] = create_metric_markers(df)
+
+    df_marker_index = df.explode('arr_marker').groupby(['ticker', 'arr_marker'])['row_num'].min().unstack(0)
+
     df_plot = pd.DataFrame(columns=['ARR range', 'CAGR', 'Time (Quarters)'])
     arr_range = pd.interval_range(arr_begin, arr_end, freq=50)
     df_list = [df_plot]
-    df.set_index(['ticker', 't'], inplace=True)
+    df.set_index(['ticker', 'row_num'], inplace=True)
     # df = df.sort_index()
 
     c_time = 0
     starttime = timeit.default_timer()
     df_r = df.groupby('ticker') \
-        .apply(compute_range_metrics_outer, arr_range=arr_range, df_arr_index=df_arr_index)
+        .apply(compute_range_metrics_outer, arr_range=arr_range, df_arr_index=df_marker_index)
     df_r = df_r.unstack(1)
     st.write("The time difference is :", timeit.default_timer() - starttime)
     st.write(f"c_time = {c_time}")
 
     st.table(df_r)
 
-
-# #####################################################################################
-# OLD Stuff
-
-def interpolate_arr_old(df, arr_i):
-    '''
-    With 'cond' we filter for two things:
-        (1.) Only data points with +ve growth (i.e ARR > ARR_p or ARR(t) > ARR(t-1))
-        (2.) ARR has equaled or broken our ARR threshold (i.e ARR > arr_i)
-    Implications:
-        (1.) We ignore data points where growth is negative, because that means at some point earlier the ARR already crossed our threshold
-        (2.) t_i <= t (because arr_i <= ARR)
-    '''
-    df = df.reset_index()
-    arr_i = 200
-    st.table(df.reset_index(drop=True))
-    st.write(df.index.get_loc(arr_i))
-    df_t = df.iloc[df.index.get_loc(arr_i)]
-    x = df_t.reset_index(drop=True)
-    # x=x.astype('str')
-    # st.table(x.columns)
-    st.table(x)
-
-    df.loc[cond] = arr_i
-    df_x = df[cond]
-    r = cagr_q(end_arr=df_x['ARR'], start_arr=df_x['ARR_p'], t_in_q=df_x['t'] - df_x['t_p'])
-    t_x = time_between_arr_ranges(end_arr=df_x['ARR'], start_arr=df_x['ARR_i'], r=r)
-    df.loc[cond, 't_i'] = df.loc[cond, 't_i'] - t_x
-    return df
-
-
-import timeit
-
-
-def compute_range_metrics_old(df_c, arr_begin, arr_end):
-    df_c['t_i'] = df_c['t']
-    df_c = interpolate_arr_old(df_c, arr_begin)
-    df_c = interpolate_arr_old(df_c, arr_end)
-
-    # t_max = the last time point we're interested in because it represents the earliest time where ticker crossed arr_end
-    t_max = df_c[df_c['ARR_i'] == arr_end]['t_i'].min()
-    # t_min = latest time point where ticker crossed arr_begin
-    t_min = df_c[(df_c['ARR_i'] == arr_begin) & (df_c['t_i'] < t_max)]['t_i'].max()
-    df_c = df_c[(df_c['t_i'] >= t_min) & (df_c['t_i'] <= t_max)]
-
-    assert df_c['ARR_i'].count() <= 2
-    assert df_c[df_c['ARR_i'] == arr_begin]['ARR_i'].count() <= 1
-    assert df_c[df_c['ARR_i'] == arr_end]['ARR_i'].count() <= 1
-
-    # st.table(df_c)
-    # st.write(t_min,t_max)
-    return pd.Series({'ARR range': pd.Interval(arr_begin, arr_end),
-                      'CAGR': cagr_q(arr_end, arr_begin, t_max - t_min),
-                      'Time (Quarters)': t_max - t_min})
-
-
-def benchmark_arr_ranges_old(df, arr_begin, arr_end):
-    st.write('Range analysis')
-
-    st.sidebar.write("## Analysis filters")
-
-    #    df = filter.by_gtm(ui.input_gtm(schema.defined_gtm_types()), df)
-
-    #    df[['ARR_p', 't_p']] = df.groupby('ticker')[['ARR', 't']].shift(1)
-    #    df[['ARR_n', 't_n']] = df.groupby('ticker')[['ARR', 't']].shift(-1)
-
-    # df = df[(df['ticker'] == 'DDOG') | (df['ticker'] == 'ESTC')]
-    #    df = df[df['ticker']=='ESTC']
-    #    df = df[['ticker', 'date','t', 'ARR', 'ARR_p', 't_p', 'ARR_n', 't_n']]
-    #    arr_begin,arr_end = st.slider('Select ARR ranges', min_value=50, max_value=3000,
-    #                          value=(100, 200), step=50, key="arr_range_slider")
-    #    st.write(arr_begin,arr_end)
-
-    def create_interval(row):
-        if np.isnan(row['ARR_p']) or np.isnan(row['ARR']) or (row['ARR_p'] > row['ARR']):
-            return pd.Interval(-1, 0)
-        return pd.Interval(row['ARR_p'], row['ARR'])
-
-    df['range'] = df.apply(create_interval, axis=1).astype('object')
-    df = df.set_index('range')
-    df = df.sort_index()
-
-    # df[['ARR_index','ARR_p_index']] = df[['ARR','ARR_p']]
-    # df = df.set_index(['ARR_p_index','ARR_index'])
-    # st.table(df)
-    # profiler = cProfile.Profile()
-    # profiler.enable()
-
-    df_plot = pd.DataFrame(columns=['ARR range', 'CAGR', 'Time (Quarters)'])
-    arr_range = pd.interval_range(arr_begin, arr_end, freq=50)
-    df_list = [df_plot]
-    for i in arr_range:
-        a0 = i.left
-        a1 = i.right
-        # starttime = timeit.default_timer()
-        df_r = df.groupby('ticker') \
-            .apply(compute_range_metrics_old, arr_begin=i.left, arr_end=i.right)
-        # .dropna(axis=0, how='any')\
-        # .sort_values('CAGR', ascending=False)
-        # st.write("The time difference is :", timeit.default_timer() - starttime)
-        df_list.append(df_r)
-    df_plot = pd.concat(df_list)
-    st.table(df_plot)
-
-    # profiler.disable()
-    # stats = pstats.Stats(profiler).sort_stats('ncalls')
-    # stats.print_stats()
